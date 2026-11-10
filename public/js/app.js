@@ -29,6 +29,7 @@
     tg: '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M21.9 4.3 18.6 20c-.2 1.1-.9 1.4-1.8.9l-5-3.7-2.4 2.3c-.3.3-.5.5-1 .5l.4-5.1 9.3-8.4c.4-.4-.1-.6-.6-.2L6 13.5l-4.9-1.5c-1.1-.3-1.1-1.1.2-1.6L20.5 3c.9-.3 1.7.2 1.4 1.3z"/></svg>',
     clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg>',
     box: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7l9-4 9 4-9 4zM3 7v10l9 4 9-4V7M12 11v10"/></svg>',
+    heart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20s-7.5-4.6-9.2-9.3C1.6 7.2 4 4 7.3 4c2 0 3.6 1.1 4.7 2.7C13.1 5.1 14.7 4 16.7 4 20 4 22.4 7.2 21.2 10.7 19.5 15.4 12 20 12 20z"/></svg>',
     sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5"/></svg>',
     moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/></svg>',
   };
@@ -37,7 +38,7 @@
   const S = {
     user: null, data: null, venue: ls.get('venue', 'Авиатор'), route: 'home',
     shift: null, ord: null, mix: null, inv: null, invStep: 'fill',
-    stockQ: '', stockLow: false, guestQ: '', guestVenue: 'all',
+    stockQ: '', stockLow: false, mixQ: '', mixVenue: 'cur', guestQ: '', guestVenue: 'all',
     timers: ls.get('timers', []),
   };
   const isAdmin = () => S.user && S.user.role === 'admin';
@@ -99,7 +100,7 @@
   async function remove(col, id) { await API.del(col, id); S.data[col] = S.data[col].filter((x) => x.id !== id); }
 
   // ---------------- маршрутизация ----------------
-  const ROUTES = ['home', 'shift', 'order', 'guests', 'stock', 'inventory', 'admin'];
+  const ROUTES = ['home', 'shift', 'order', 'mixes', 'guests', 'stock', 'inventory', 'admin'];
   function go(r) { if (location.hash !== '#' + r) location.hash = r; else render(); }
   window.addEventListener('hashchange', () => { render(); window.scrollTo(0, 0); });
   function currentRoute() { const h = location.hash.replace('#', ''); return ROUTES.includes(h) ? h : 'home'; }
@@ -130,12 +131,13 @@
     if (!S.user) return renderLogin();
     S.data = await API.loadAll();
     S.data.settings = S.data.settings || {};
+    S.data.mixes = S.data.mixes || [];
     render();
     checkSunday();
   }
 
   // ---------------- каркас ----------------
-  const NAV = [['home', 'Главная', I.home], ['shift', 'Смена', I.shift], ['order', 'Заказ', I.order], ['guests', 'Гости', I.guests], ['stock', 'Остатки', I.stock]];
+  const NAV = [['home', 'Главная', I.home], ['shift', 'Смена', I.shift], ['order', 'Заказ', I.order], ['mixes', 'Миксы', I.heart], ['guests', 'Гости', I.guests], ['stock', 'Остатки', I.stock]];
   function shell(content) {
     const r = S.route === 'inventory' ? 'stock' : S.route;
     const nav = NAV.map(([k, t, ic]) => `<a class="nav ${r === k ? 'on' : ''}" href="#${k}">${ic}<span>${t}</span></a>`).join('');
@@ -153,20 +155,20 @@
           <div class="spacer"></div>
           <div class="venue-switch">${KM.VENUES.map((v) => `<button data-venue="${v}" class="${S.venue === v ? 'on' : ''}">${v}</button>`).join('')}</div>
           <a class="iconbtn" href="#admin" title="Настройки" style="${''}">${I.admin.replace('<svg ', '<svg width="18" height="18" ')}</a>
+          ${timerPill()}
         </div>
         ${content}
       </main>
       <nav class="bottomnav">${NAV.map(([k, t, ic]) => `<a class="${r === k ? 'on' : ''}" href="#${k}">${ic}<span>${t}</span></a>`).join('')}</nav>
-    </div>
-    ${timerPill()}`;
+    </div>`;
   }
 
   function render() {
     if (!S.user || !S.data) return;
     S.route = currentRoute();
-    const views = { home: vHome, shift: vShift, order: vOrder, guests: vGuests, stock: vStock, inventory: vInventory, admin: vAdmin };
+    const views = { home: vHome, shift: vShift, order: vOrder, mixes: vMixes, guests: vGuests, stock: vStock, inventory: vInventory, admin: vAdmin };
     document.getElementById('app').innerHTML = shell(views[S.route]());
-    const after = { shift: afterShift, order: afterOrder, guests: afterGuests, stock: afterStock, inventory: afterInventory, admin: afterAdmin }[S.route];
+    const after = { shift: afterShift, order: afterOrder, mixes: afterMixes, guests: afterGuests, stock: afterStock, inventory: afterInventory, admin: afterAdmin }[S.route];
     if (after) after();
   }
 
@@ -389,6 +391,7 @@
     const w = modal(`
       <div class="mh"><h2>${esc(g.name)}</h2><button class="iconbtn" data-close>${I.close}</button></div>
       <dl class="kv">${GUEST_FIELDS.slice(1).filter(([k]) => g[k]).map(([k, t]) => `<dt>${t}</dt><dd>${esc(g[k])}</dd>`).join('')}</dl>
+      ${(S.data.mixes || []).filter((m) => m.guestId === g.id).length ? `<div class="section"><h3>Понравившиеся миксы</h3></div>${(S.data.mixes || []).filter((m) => m.guestId === g.id).map(mixRow).join('')}` : ''}
       ${g.updatedBy ? `<div class="hint">Изменено: ${esc(g.updatedBy)}${g.updatedAt ? ' · ' + new Date(g.updatedAt).toLocaleDateString('ru-RU') : ''}</div>` : ''}
       <div class="grid two" style="margin-top:16px">
         <button class="btn primary" data-a="order">${I.order.replace('<svg ', '<svg width="18" height="18" ')} Принять заказ</button>
@@ -846,11 +849,13 @@
     unlockAudio();
     render(); window.scrollTo(0, 0);
   }
-  function mixCard(m, title, big) {
+  function mixCard(m, title, big, likeIdx) {
+    const liked = likeIdx != null && S.mix && S.mix.liked && S.mix.liked[likeIdx];
     return `<div class="${big ? 'mix' : 'card'}">
       <div class="row between"><h3 class="${big ? 'accent' : ''}">${title}</h3><span class="badge">${esc(m.strengthLabel)} · ${m.sour < 35 ? 'сладкий' : m.sour > 65 ? 'кислый' : 'кисло-сладкий'}</span></div>
       <div class="mix-bar">${m.parts.map((p) => `<i style="width:${p.pct}%"></i>`).join('')}</div>
       ${m.parts.map((p) => `<div class="mix-part"><span class="pct">${p.pct}%</span><div><div style="font-weight:600">${esc(p.flavor)}</div><div class="muted small">${esc(p.brand)} · в наличии ${fmtG(p.stock)} г${p.why && p.why.length ? ' · ' + esc(p.why.join('; ')) : ''}</div></div><span class="g">${p.grams} г</span></div>`).join('')}
+      ${likeIdx != null ? `<button class="btn ${liked ? '' : big ? 'primary' : ''} block" style="margin-top:12px" data-like="${likeIdx}" ${liked ? 'disabled' : ''}>${liked ? '✓ В понравившихся' : I.heart.replace('<svg ', '<svg width="18" height="18" ') + ' Гостю понравилось'}</button>` : ''}
     </div>`;
   }
   function vMix() {
@@ -864,9 +869,9 @@
           <div><div class="muted small">Таймер</div><div class="timer-big" id="mTimer">${t ? fmtLeft(t.end - Date.now()) : '—'}</div></div>
           <div class="stack" style="text-align:right"><div class="small"><span class="muted">Чаша:</span> ${esc(res.bowl)} · ${res.bowlGrams} г</div><div class="small"><span class="muted">Жар:</span> ${esc(res.heat)}</div>${o.hookah ? `<div class="small"><span class="muted">Кальян:</span> ${esc(o.hookah)}</div>` : ''}<div class="small"><span class="muted">Тяга:</span> ${esc(o.draw)}</div></div>
         </div>
-        ${mixCard(res.best, 'Лучший микс', true)}
+        ${mixCard(res.best, S.mix.repeat ? esc(S.mix.repeat) : 'Лучший микс', true, S.mix.repeat ? null : 0)}
         ${res.tips.length ? `<div class="card small">${res.tips.map((x) => '• ' + esc(x)).join('<br>')}</div>` : ''}
-        ${res.alternatives.length ? `<div class="section"><h2>Альтернативы</h2></div>${res.alternatives.map((a, i) => mixCard(a, 'Вариант ' + (i + 2))).join('')}` : ''}
+        ${res.alternatives.length ? `<div class="section"><h2>Альтернативы</h2></div>${res.alternatives.map((a, i) => mixCard(a, 'Вариант ' + (i + 2), false, i + 1)).join('')}` : ''}
         <div class="grid two">
           <button class="btn" id="mCopy">Скопировать микс</button>
           ${o.guestId ? '' : '<button class="btn" id="mSaveGuest">В постоянные гости</button>'}
@@ -874,6 +879,116 @@
         </div>
       </div>`;
   }
+  // ================= МИКСЫ (понравившиеся) =================
+  function likeForm(idx) {
+    const { res, req } = S.mix;
+    const m = idx === 0 ? res.best : res.alternatives[idx - 1];
+    const g = req.guestId && S.data.guests.find((x) => x.id === req.guestId);
+    const auto = m.parts.map((p) => p.flavor.replace(/\s*\(.*$/, '')).join(' + ');
+    const w = modal(`
+      <div class="mh"><h3>Гостю понравилось</h3><button class="iconbtn" data-close>${I.close}</button></div>
+      <div class="small muted" style="margin-bottom:12px">${m.parts.map((p) => `${esc(p.brand)} ${esc(p.flavor)} — ${p.pct}%`).join('<br>')}</div>
+      <form class="stack" id="lkForm">
+        <label class="f"><span>Название микса</span><input class="input" name="name" value="${esc(auto)}" required></label>
+        <label class="f"><span>Гость</span><select class="input" name="guestId"><option value="">— без привязки к гостю —</option>${S.data.guests.slice().sort((a, b) => a.name.localeCompare(b.name, 'ru')).map((x) => `<option value="${x.id}" ${g && g.id === x.id ? 'selected' : ''}>${esc(x.name)} (${esc(x.venue)})</option>`).join('')}</select></label>
+        <label class="f"><span>Заметка</span><input class="input" name="note" placeholder="напр. попросил чуть крепче / на гармошке лучше"></label>
+        <div class="row" style="justify-content:flex-end"><button type="button" class="btn ghost" data-close>Отмена</button><button class="btn primary">${I.heart.replace('<svg ', '<svg width="16" height="16" ')} Сохранить</button></div>
+      </form>`);
+    w.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', closeModal));
+    $('#lkForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const gid = fd.get('guestId');
+      const gg = gid && S.data.guests.find((x) => x.id === gid);
+      const doc = {
+        id: uid(), venue: S.venue, name: String(fd.get('name')).trim(), note: String(fd.get('note') || '').trim(),
+        guestId: gid || '', guestName: gg ? gg.name : (req.table && !/^\d+$/.test(req.table) ? req.table : ''),
+        parts: m.parts.map((p) => ({ flavorId: p.flavorId, flavor: p.flavor, brand: p.brand, pct: p.pct })),
+        bowl: res.bowl, heat: res.heat, hookah: req.hookah || '', draw: req.draw || '',
+        strengthLabel: m.strengthLabel, sour: m.sour, author: fullName(S.user), authorId: S.user.id, createdAt: new Date().toISOString(),
+      };
+      try {
+        await save('mixes', doc);
+        S.mix.liked = S.mix.liked || {}; S.mix.liked[idx] = doc.id;
+        closeModal(); toast('Микс добавлен в «Понравившиеся»', 'ok'); render();
+      } catch (er) { toast(er.message, 'err'); }
+    });
+  }
+  /** Хватает ли табака на микс в текущем заведении */
+  function mixAvailability(mx, bowlGrams) {
+    const st = stockMap();
+    const ids = new Set(venueFlavors().map((f) => f.id));
+    const byName = {};
+    for (const f of venueFlavors()) byName[f.name.toLowerCase()] = f;
+    const missing = [], resolved = [];
+    for (const p of mx.parts) {
+      let fid = ids.has(p.flavorId) ? p.flavorId : (byName[p.flavor.toLowerCase()] || {}).id;
+      const have = fid && st[fid] ? st[fid].stock : 0;
+      const need = Math.round(bowlGrams * p.pct / 100);
+      if (!fid || have < need + 2) missing.push(p.flavor.replace(/\s*\(.*$/, ''));
+      resolved.push({ ...p, flavorId: fid || p.flavorId, stock: have, grams: need });
+    }
+    return { missing, parts: resolved };
+  }
+  function mixesFor(list) {
+    const q = S.mixQ.trim().toLowerCase();
+    if (S.mixVenue === 'cur') list = list.filter((m) => m.venue === S.venue);
+    if (q) list = list.filter((m) => [m.name, m.guestName, m.note, ...m.parts.map((p) => p.brand + ' ' + p.flavor)].join(' ').toLowerCase().includes(q));
+    return list.slice().sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+  }
+  function mixRow(m) {
+    const bowlGrams = KM.BOWL_GRAMS[m.bowl] || 18;
+    const av = mixAvailability(m, bowlGrams);
+    return `<div class="card">
+      <div class="row between" style="align-items:flex-start"><div style="min-width:0"><h3>${esc(m.name)}</h3><div class="muted small">${m.guestName ? '♥ ' + esc(m.guestName) + ' · ' : ''}${esc(m.venue)} · ${esc(m.author || '')}${m.createdAt ? ' · ' + new Date(m.createdAt).toLocaleDateString('ru-RU') : ''}</div></div>
+        <span class="badge ${av.missing.length ? 'red' : 'green'}">${av.missing.length ? 'нет в наличии' : 'всё есть'}</span></div>
+      <div class="mix-bar">${m.parts.map((p) => `<i style="width:${p.pct}%"></i>`).join('')}</div>
+      <div class="small">${m.parts.map((p) => `<b class="accent">${p.pct}%</b> ${esc(p.brand)} · ${esc(p.flavor)}`).join('<br>')}</div>
+      <div class="muted small" style="margin-top:6px">${[m.strengthLabel, m.bowl, m.heat, m.hookah].filter(Boolean).map(esc).join(' · ')}${m.note ? '<br>📝 ' + esc(m.note) : ''}${av.missing.length ? `<br><span style="color:var(--danger)">Не хватает в ${esc(S.venue)}: ${esc(av.missing.join(', '))}</span>` : ''}</div>
+      <div class="row" style="margin-top:12px"><button class="btn primary sm" data-repeat="${m.id}">Повторить</button>${isAdmin() || m.authorId === S.user.id ? `<button class="btn danger sm" data-mdel="${m.id}">Удалить</button>` : ''}</div>
+    </div>`;
+  }
+  function vMixes() {
+    const list = mixesFor(S.data.mixes || []);
+    return `
+      <div class="stack">
+        <div class="row between wrap"><h1>Понравившиеся миксы</h1><a class="btn primary sm" href="#order">${I.plus} Новый заказ</a></div>
+        <div class="search">${I.search}<input class="input" id="mxQ" placeholder="Поиск: гость, вкус, бренд" value="${esc(S.mixQ)}"></div>
+        <div class="seg" id="mxVenue">${[['cur', S.venue], ['all', 'Все заведения']].map(([k, t]) => `<button data-v="${k}" class="${S.mixVenue === k ? 'on' : ''}">${esc(t)}</button>`).join('')}</div>
+        <div id="mxList">${list.length ? list.map(mixRow).join('') : '<div class="empty">Пока пусто. После подбора микса нажмите «Гостю понравилось».</div>'}</div>
+      </div>`;
+  }
+  function afterMixes() {
+    const q = $('#mxQ');
+    q.addEventListener('input', () => { S.mixQ = q.value; const p = q.selectionStart; render(); const n = $('#mxQ'); n.focus(); n.setSelectionRange(p, p); });
+    $('#mxVenue').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { S.mixVenue = b.dataset.v; render(); } });
+  }
+  function repeatMix(m) {
+    const bowlGrams = KM.BOWL_GRAMS[m.bowl] || 18;
+    const av = mixAvailability(m, bowlGrams);
+    const label = m.guestName || m.name;
+    const timer = { id: uid(), label, venue: S.venue, end: Date.now() + 15 * 60000, mix: m.parts.map((p) => `${p.flavor} ${p.pct}%`).join(' + ') };
+    S.timers.push(timer); ls.set('timers', S.timers);
+    S.ord = newOrder(m.guestId && S.data.guests.find((g) => g.id === m.guestId));
+    S.mix = {
+      repeat: m.name, label, timerId: timer.id,
+      req: { ...S.ord, hookah: m.hookah, draw: m.draw || 'Диффузорная' },
+      res: { best: { parts: av.parts.map((p) => ({ ...p, why: [] })), strengthLabel: m.strengthLabel || '—', sour: m.sour != null ? m.sour : 50 }, alternatives: [], bowl: m.bowl || 'Фанел', bowlGrams, heat: m.heat || KM.autoHeat(m.bowl), tips: av.missing.length ? ['Не хватает: ' + av.missing.join(', ') + ' — подберите замену или сделайте новый заказ.'] : [] },
+    };
+    unlockAudio();
+    if (av.missing.length) toast('Не всё есть в наличии: ' + av.missing.join(', '), 'err');
+    go('order');
+  }
+  document.addEventListener('click', async (e) => {
+    const r = e.target.closest('[data-repeat]');
+    if (r) { const m = (S.data.mixes || []).find((x) => x.id === r.dataset.repeat); if (m) { closeModal(); repeatMix(m); } return; }
+    const d = e.target.closest('[data-mdel]');
+    if (d) {
+      const m = (S.data.mixes || []).find((x) => x.id === d.dataset.mdel); if (!m) return;
+      if (await confirmBox(`Удалить микс «${m.name}»?`, 'Удалить')) { await remove('mixes', m.id); toast('Удалено'); closeModal(); render(); }
+    }
+  });
+
   function mixText() {
     const { res, label } = S.mix;
     return `${label}: ` + res.best.parts.map((p) => `${p.brand} ${p.flavor} — ${p.pct}% (${p.grams} г)`).join(' + ') + ` · ${res.bowl}, ${res.heat}`;
@@ -882,6 +997,7 @@
     $('#mBack').addEventListener('click', () => { S.mix = null; render(); });
     $('#mNew').addEventListener('click', () => { S.mix = null; S.ord = newOrder(); render(); });
     $('#mCopy').addEventListener('click', async () => toast((await copyText(mixText())) ? 'Скопировано' : 'Не удалось', 'ok'));
+    document.querySelectorAll('[data-like]').forEach((b) => b.addEventListener('click', () => likeForm(+b.dataset.like)));
     const sg = $('#mSaveGuest');
     if (sg) sg.addEventListener('click', () => {
       const o = S.mix.req;

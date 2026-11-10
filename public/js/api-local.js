@@ -7,7 +7,7 @@
 
   function seedDb() {
     const s = window.KM_SEED;
-    const db = { users: [], sessions: {}, guests: [], brands: [], flavors: [], inventories: [], shifts: [], orders: [], settings: [] };
+    const db = { users: [], sessions: {}, guests: [], brands: [], flavors: [], inventories: [], shifts: [], orders: [], settings: [], mixes: [] };
     db.users.push({ id: 'u1', login: 'admin', password: 'admin', firstName: 'Александр', lastName: 'Железной', role: 'admin' });
     db.users.push({ id: 'u2', login: 'km', password: 'km', firstName: 'Кальянный', lastName: 'Савенко', role: 'km' });
     db.guests = s.guests.map((g) => ({ ...g }));
@@ -31,7 +31,7 @@
   let current = null;
   const delay = (v) => new Promise((r) => setTimeout(() => r(v), 60));
   const fail = (m) => Promise.reject(new Error(m));
-  const COLS = ['guests', 'brands', 'flavors', 'inventories', 'shifts', 'orders', 'settings'];
+  const COLS = ['guests', 'brands', 'flavors', 'inventories', 'shifts', 'orders', 'settings', 'mixes'];
 
   window.API = {
     mode: 'demo',
@@ -57,18 +57,19 @@
       return delay({
         settings: db.settings.find((s) => s.id === 'main') || {},
         guests: db.guests, brands: db.brands, flavors: db.flavors, inventories: db.inventories,
-        shifts: db.shifts.slice(-50), orders: db.orders.slice(-50),
+        shifts: db.shifts.slice(-50), orders: db.orders.slice(-50), mixes: db.mixes || [],
       });
     },
     async put(col, doc) {
       if (!COLS.includes(col)) return fail('Неизвестная коллекция');
       const db = load();
+      db[col] = db[col] || [];
       const d = { ...doc, id: doc.id || uid(), updatedAt: new Date().toISOString() };
       const i = db[col].findIndex((x) => x.id === d.id);
       if (i >= 0) db[col][i] = d; else db[col].push(d);
       save(); return delay(d);
     },
-    async del(col, id) { const db = load(); db[col] = db[col].filter((x) => x.id !== id); save(); return { ok: true }; },
+    async del(col, id) { const db = load(); db[col] = (db[col] || []).filter((x) => x.id !== id); save(); return { ok: true }; },
     async listUsers() { return load().users.map(publicUser); },
     async saveUser(u) {
       const db = load();

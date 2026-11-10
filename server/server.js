@@ -11,7 +11,7 @@ const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'data', 'kmbox
 const PUBLIC = path.join(__dirname, '..', 'public');
 const SEED = path.join(__dirname, 'seed.json');
 const SESSION_DAYS = 30;
-const COLLECTIONS = new Set(['guests', 'brands', 'flavors', 'inventories', 'shifts', 'orders', 'settings']);
+const COLLECTIONS = new Set(['guests', 'brands', 'flavors', 'inventories', 'shifts', 'orders', 'settings', 'mixes']);
 const ADMIN_ONLY_WRITE = new Set(['settings', 'brands']);
 
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
@@ -138,8 +138,8 @@ async function api(req, res, url) {
   }
 
   if (parts[0] === 'all' && method === 'GET') {
-    const out = { settings: {}, guests: [], brands: [], flavors: [], inventories: [], shifts: [], orders: [] };
-    for (const r of db.prepare("SELECT col, data FROM docs WHERE col IN ('guests','brands','flavors','inventories','settings')").all()) {
+    const out = { settings: {}, mixes: [], guests: [], brands: [], flavors: [], inventories: [], shifts: [], orders: [] };
+    for (const r of db.prepare("SELECT col, data FROM docs WHERE col IN ('guests','brands','flavors','inventories','settings','mixes')").all()) {
       const d = JSON.parse(r.data);
       if (r.col === 'settings') { if (d.id === 'main') out.settings = d; } else out[r.col].push(d);
     }
