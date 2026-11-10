@@ -1,0 +1,11 @@
+{
+  "name": "kmbox",
+  "version": "1.0.0",
+  "description": "KM Box — помощник кальянного мастера H-Box",
+  "private": true,
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node --no-warnings server/server.js",
+    "build:demo": "node scripts/build-demo.js"
+  }
+}
